@@ -1,6 +1,7 @@
 [
   {
-  "name": "Cathy",
-  "value": "https://api.cathaypacific.com/reference-data/getServerTime->/serverTime"
+    "name": "Cathy",
+    "source": "https://api.cathaypacific.com/reference-data/getServerTime",
+    "accessor": "/serverTime"
   }
 ]

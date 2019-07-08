@@ -11,18 +11,18 @@ import (
 	"github.com/sqweek/dialog"
 	"io/ioutil"
 	"os"
-	"strings"
 	"sync"
 	"time"
 )
 
 type Config struct {
-	Name  string `json:"name"`
-	Value string `json:"value"`
+	Name     string `json:"name"`
+	Source   string `json:"source"`
+	Accessor string `json:"accessor"`
 }
 
 type _Config struct {
-	Value     string
+	Config
 	Retrieved string
 }
 
@@ -33,7 +33,12 @@ var (
 )
 
 func main() {
-	raw, err := ioutil.ReadFile("cathay.json")
+	if len(os.Args) != 2 {
+		fmt.Println("")
+		return
+	}
+
+	raw, err := ioutil.ReadFile(os.Args[1])
 	if err != nil {
 		fmt.Println("Config file not found. No configuration is loaded.")
 	}
@@ -51,7 +56,8 @@ func main() {
 
 	for _, config := range configArr {
 		configMap.Store(config.Name, _Config{
-			Value: config.Value,
+			config,
+			"",
 		})
 	}
 
@@ -67,7 +73,7 @@ func onReady() {
 		var config = v.(_Config)
 
 		itemClickHandler := systray.AddMenuItem(name, fmt.Sprintf("Click to get latest data for %s", name))
-		go waitForClick(itemClickHandler, name, config)
+		go waitForClick(itemClickHandler, config)
 		return true
 	})
 
@@ -94,7 +100,7 @@ func onExit() {
 	c <- true
 }
 
-func waitForClick(itemClickHandler *systray.MenuItem, name string, config _Config) {
+func waitForClick(itemClickHandler *systray.MenuItem, config _Config) {
 	for {
 		select {
 		case <-itemClickHandler.ClickedCh:
@@ -103,7 +109,8 @@ func waitForClick(itemClickHandler *systray.MenuItem, name string, config _Confi
 			if err != nil {
 				beeep.Alert("Failure", err.Error(), "")
 			} else {
-				update(name, data)
+				update(config.Name, data)
+
 				err = clipboard.WriteAll(data)
 				if err != nil {
 					beeep.Alert("Failure", "Cannot copy to your clipboard", "")
@@ -116,22 +123,23 @@ func waitForClick(itemClickHandler *systray.MenuItem, name string, config _Confi
 }
 
 func getData(config _Config) (string, error) {
-	value := config.Value
-	tokens := strings.Split(value, "->")
-	if len(tokens) > 1 {
-		doc, err := jsonquery.LoadURL(tokens[0])
+	source := config.Source
+	accessor := config.Accessor
+
+	if len(accessor) > 0 {
+		doc, err := jsonquery.LoadURL(source)
 		if err != nil {
 			return "", fmt.Errorf("%s", "Please check your internet")
 		}
 
-		nodeNameNode := jsonquery.FindOne(doc, tokens[1])
+		nodeNameNode := jsonquery.FindOne(doc, accessor)
 		if nodeNameNode != nil {
 			return nodeNameNode.InnerText(), nil
 		} else {
 			return "", fmt.Errorf("%s", "Cannot parse remote source using rules provided")
 		}
 	} else {
-		return value, nil
+		return source, nil
 	}
 }
 
@@ -165,7 +173,7 @@ func update(name, newData string) {
 					}
 				}
 			}
-			
+
 			item.Retrieved = newData
 			configMap.Store(name, item)
 		}
@@ -173,6 +181,6 @@ func update(name, newData string) {
 }
 
 func trace(content string) error {
-	_, err := traceFile.Write([]byte(fmt.Sprintf("%s: %s \n", time.Now().Format("2006-01-02 15:04:05"), content)));
+	_, err := traceFile.Write([]byte(fmt.Sprintf("%s: %s \n", time.Now().Format("2006-01-02 15:04:05"), content)))
 	return err
 }
